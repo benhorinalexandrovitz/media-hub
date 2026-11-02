@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Media Hub · SEIL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231428A0'/%3E%3Cpath d='M9 22V10h3l4 6 4-6h3v12h-3v-7l-4 6-4-6v7z' fill='white'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section id="login" class="login">
+  <div class="login-card">
+    <div class="brand-mark big">M</div>
+    <h1>Media Hub</h1>
+    <p class="muted">מצגות מדיה ונתוני צפיות · SEIL</p>
+    <form id="loginForm" autocomplete="on">
+      <input type="text" name="username" value="media-hub" autocomplete="username" hidden>
+      <label class="field">
+        <span>סיסמה</span>
+        <input id="pw" type="password" autocomplete="current-password" required autofocus>
+      </label>
+      <label class="check"><input id="remember" type="checkbox"> לזכור אותי במכשיר הזה</label>
+      <button class="btn primary wide" id="loginBtn" type="submit">כניסה</button>
+      <p id="loginErr" class="err" hidden></p>
+    </form>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">M</div><div><b>Media Hub</b><small>SEIL</small></div></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="deck" role="tab"><svg viewBox="0 0 24 24"><path d="M3 4h18v12H3zM8 20h8M12 16v4" /></svg><span>הפיכת אקסל למצגת</span></button>
+      <button class="tab" data-tab="views" role="tab"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg><span>עדכון סיכום תכנים ברשתות</span></button>
+      <button class="tab" data-tab="history" role="tab"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5" /></svg><span>היסטוריה</span></button>
+      <button class="tab" data-tab="settings" role="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>הגדרות</span></button>
+    </nav>
+    <button class="btn ghost sm" id="logout" title="יציאה">יציאה</button>
+  </header>
+
+  <main>
+    <!-- ======== TAB 1: DECK ======== -->
+    <section class="panel active" id="tab-deck">
+      <div class="page-head">
+        <h2>הפיכת אקסל למצגת</h2>
+        <p class="muted">מעלים אקסל או מדביקים לינקים. המערכת שולפת את הנתונים, מצלמת את הכתבות ובונה מצגת בפורמט ה-Media Sample Reviews, ומעדכנת את ה-Golden Sample.</p>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-h"><span class="step">1</span><h3>מקור הלינקים</h3></div>
+          <label class="drop" id="deckDrop">
+            <input type="file" id="deckFile" accept=".xlsx,.xlsm" hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+            <b>גררו לכאן קובץ אקסל עם לינקים</b><small>או לחצו לבחירה</small>
+          </label>
+          <div id="deckFileInfo" class="fileinfo" hidden>
+            <div class="row gap wrap">
+              <label class="field inline"><span>גיליון</span><select id="deckSheet"></select></label>
+              <label class="field inline"><span>מתאריך</span><input type="date" id="deckFrom"></label>
+              <label class="field inline"><span>עד</span><input type="date" id="deckTo"></label>
+            </div>
+            <p class="muted small" id="deckFileCount"></p>
+          </div>
+          <div class="or"><span>או</span></div>
+          <label class="field"><span>הדבקת לינקים (לינק בכל שורה, לפי הסדר הרצוי במצגת)</span>
+            <textarea id="deckLinks" rows="6" placeholder="https://www.ynet.co.il/...&#10;https://www.instagram.com/reel/...&#10;https://www.tiktok.com/@.../video/..."></textarea>
+          </label>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><span class="step">2</span><h3>פרטי המצגת</h3></div>
+          <div class="form-grid">
+            <label class="field"><span>כותרת הדוח</span><input id="optTitle" dir="auto" value="2026 Media Sample Reviews Report"></label>
+            <label class="field"><span>מוצר / קמפיין (שקף פתיחה שני)</span><input id="optProduct" dir="auto" placeholder="Fold 8"></label>
+            <label class="field"><span>חברה בת</span><input id="optSubs" dir="auto" value="SEIL"></label>
+            <label class="field"><span>כותרת בכל שקף</span><input id="optHeader" dir="auto" value="[SEIL] TECHIE  Media Review"></label>
+          </div>
+          <div class="golden-box">
+            <div class="row between wrap gap">
+              <div><b>קובץ Golden Sample</b><p class="muted small" id="goldenStatus">טוען…</p></div>
+              <label class="btn sm"><input type="file" id="goldenFile" accept=".xlsx" hidden>העלאת גרסה חדשה</label>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="optAI" checked> לתרגם כותרת ולחלץ ציטוטים חיוביים עם Claude <small class="muted" id="aiHint"></small></label>
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn primary lg" id="fetchBtn"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>שליפת נתונים מהלינקים</button>
+        <span class="muted small" id="fetchInfo"></span>
+      </div>
+      <div class="log" id="deckLog" hidden></div>
+
+      <div id="itemsWrap" hidden>
+        <div class="row between wrap gap section-h">
+          <h3><span class="step">3</span> בדיקה ועריכה <small class="muted" id="itemsCount"></small></h3>
+          <div class="row gap wrap">
+            <button class="btn sm" id="refetchMissing">שליפה חוזרת לחסרים</button>
+            <button class="btn sm ghost" id="clearItems">ניקוי</button>
+          </div>
+        </div>
+        <div id="items" class="items"></div>
+      </div>
+
+      <div class="sticky-actions" id="deckActions" hidden>
+        <button class="btn primary" id="dlDeck">⬇ הורדת מצגת</button>
+        <button class="btn" id="dlGolden">⬇ עדכון Golden Sample</button>
+        <button class="btn ghost" id="saveDeck">שמירה בהיסטוריה</button>
+      </div>
+    </section>
+
+    <!-- ======== TAB 2: VIEWS ======== -->
+    <section class="panel" id="tab-views">
+      <div class="page-head">
+        <h2>עדכון סיכום תכנים ברשתות</h2>
+        <p class="muted">מעלים את אקסל סיכום תכני הטקיז, מסננים לפי תקופה ולוחצים "עדכון צפיות". המערכת מושכת את מספר הצפיות העדכני מאינסטגרם, טיקטוק, פייסבוק ויוטיוב ומחזירה את אותו קובץ עם המספרים המעודכנים.</p>
+      </div>
+      <div class="card">
+        <div class="row between wrap gap">
+          <label class="drop compact" id="viewsDrop">
+            <input type="file" id="viewsFile" accept=".xlsx,.xlsm" hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+            <b>העלאת קובץ סיכום תכנים</b>
+          </label>
+          <div class="row gap wrap">
+            <button class="btn" id="viewsLoadLast">טעינת הגרסה האחרונה ששמורה</button>
+          </div>
+        </div>
+        <p class="muted small" id="viewsFileInfo"></p>
+      </div>
+
+      <div id="viewsBody" hidden>
+        <div class="card filters">
+          <div class="row gap wrap end">
+            <label class="field inline"><span>מתאריך</span><input type="date" id="vFrom"></label>
+            <label class="field inline"><span>עד</span><input type="date" id="vTo"></label>
+            <label class="field inline"><span>יוצר</span><select id="vCreator"><option value="">כולם</option></select></label>
+            <label class="field inline"><span>נושא</span><select id="vTopic"><option value="">הכל</option></select></label>
+            <div class="chips" id="vPlatforms"></div>
+          </div>
+          <div class="row gap wrap quick" id="vQuick"></div>
+        </div>
+
+        <div class="kpis" id="vKpis"></div>
+
+        <div class="grid2">
+          <div class="card"><h3>צפיות לפי יוצר</h3><div class="chart-box"><canvas id="chCreators"></canvas></div></div>
+          <div class="card"><h3>צפיות לפי פלטפורמה</h3><div class="chart-box"><canvas id="chPlatforms"></canvas></div></div>
+        </div>
+
+        <div class="card">
+          <div class="row between wrap gap">
+            <h3>תכנים <small class="muted" id="vCount"></small></h3>
+            <div class="row gap wrap">
+              <button class="btn primary" id="vUpdate">עדכון צפיות</button>
+              <button class="btn" id="vDownload">⬇ הורדת אקסל מעודכן</button>
+            </div>
+          </div>
+          <div class="log" id="viewsLog" hidden></div>
+          <div class="table-wrap"><table class="tbl" id="vTable"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== TAB 3: HISTORY ======== -->
+    <section class="panel" id="tab-history">
+      <div class="page-head"><h2>היסטוריה</h2><p class="muted">כל המצגות ועדכוני הצפיות נשמרים מוצפנים ב-GitHub, ואפשר לחזור אליהם בכל רגע.</p></div>
+      <div class="card"><h3>מגמת צפיות כוללת לאורך העדכונים</h3><div class="chart-box"><canvas id="chTrend"></canvas></div></div>
+      <div class="grid2">
+        <div class="card"><h3>מצגות</h3><div id="histDecks" class="hist"></div></div>
+        <div class="card"><h3>עדכוני צפיות</h3><div id="histViews" class="hist"></div></div>
+      </div>
+    </section>
+
+    <!-- ======== TAB 4: SETTINGS ======== -->
+    <section class="panel" id="tab-settings">
+      <div class="page-head"><h2>הגדרות</h2><p class="muted">ההגדרות נשמרות מוצפנות בסיסמת האתר.</p></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>חיבורים</h3>
+          <label class="field"><span>Apify API token</span><input id="sApify" type="password" autocomplete="off"></label>
+          <label class="field"><span>Claude API key (לא חובה, לתרגום כותרות וחילוץ ציטוטים)</span><input id="sClaude" type="password" autocomplete="off" placeholder="sk-ant-..."></label>
+          <label class="field"><span>מודל Claude</span><input id="sModel" placeholder="claude-sonnet-4-5"></label>
+          <label class="field"><span>GitHub token (גישה לריפו של האתר בלבד)</span><input id="sGithub" type="password" autocomplete="off"></label>
+          <div class="row gap"><button class="btn sm" id="testConn">בדיקת חיבורים</button><span class="small" id="testOut"></span></div>
+        </div>
+        <div class="card">
+          <h3>ברירות מחדל ל-Golden Sample</h3>
+          <div class="form-grid">
+            <label class="field"><span>Subsidiary/Country</span><input id="dSubs"></label>
+            <label class="field"><span>Media Archetype</span><input id="dArch"></label>
+            <label class="field"><span>Seeding Rationale</span><input id="dRat"></label>
+            <label class="field"><span>Previously seeded?</span><input id="dSeed"></label>
+          </div>
+          <h3 class="mt">מתקדם: Apify actors</h3>
+          <div class="form-grid">
+            <label class="field"><span>Instagram</span><input id="aInstagram" dir="ltr"></label>
+            <label class="field"><span>TikTok</span><input id="aTiktok" dir="ltr"></label>
+            <label class="field"><span>Facebook</span><input id="aFacebook" dir="ltr"></label>
+            <label class="field"><span>YouTube</span><input id="aYoutube" dir="ltr"></label>
+            <label class="field"><span>כתבות + צילומי מסך</span><input id="aWeb" dir="ltr"></label>
+            <label class="field"><span>Proxy group (ריק = רגיל, RESIDENTIAL לאתרים חוסמים)</span><input id="sProxy" dir="ltr"></label>
+          </div>
+          <p class="muted small" id="kbInfo"></p>
+        </div>
+      </div>
+      <div class="actions-row"><button class="btn primary" id="saveSettings">שמירת הגדרות</button><span class="small muted" id="saveOut"></span></div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<div id="busy" class="busy" hidden><div class="spinner"></div><p id="busyText">רגע…</p></div>
+
+<script src="vendor/exceljs.min.js"></script>
+<script src="vendor/pptxgen.bundle.js"></script>
+<script src="vendor/chart.umd.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

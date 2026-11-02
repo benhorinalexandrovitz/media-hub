@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>התקנת Media Hub</title>
+<style>
+  :root { --brand:#1428a0; --brand2:#2f4fe0; --line:#e3e7f0; --muted:#667089; --ok:#12a150; --bad:#d93a3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; background:#0b1030; color:#141a2e; min-height:100vh; display:grid; place-items:center; padding:16px; }
+  .card { background:#fff; width:100%; max-width:560px; border-radius:20px; padding:30px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+  h1 { margin:0 0 4px; font-size:26px; }
+  p.muted { color:var(--muted); margin:0 0 20px; font-size:14.5px; line-height:1.5; }
+  label { display:block; font-size:13.5px; font-weight:600; color:var(--muted); margin-bottom:12px; }
+  label small { font-weight:400; }
+  input { display:block; width:100%; margin-top:5px; font:inherit; font-size:15px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; direction:ltr; }
+  input:focus { outline:none; border-color:var(--brand2); box-shadow:0 0 0 3px rgba(47,79,224,.15); }
+  button { width:100%; margin-top:8px; padding:13px; font:inherit; font-size:16px; font-weight:700; color:#fff; background:var(--brand); border:0; border-radius:12px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  ol { margin:18px 0 0; padding:0 18px 0 0; font-size:14px; }
+  ol li { margin:5px 0; color:var(--muted); }
+  ol li.run { color:#141a2e; font-weight:600; }
+  ol li.ok { color:var(--ok); }
+  ol li.bad { color:var(--bad); font-weight:600; }
+  .done { margin-top:18px; padding:16px; border-radius:12px; background:#eafaf0; border:1px solid #c8efd7; font-size:15px; line-height:1.6; }
+  .done a { font-weight:700; color:var(--brand); direction:ltr; display:inline-block; }
+  .err { margin-top:14px; color:var(--bad); font-size:14px; white-space:pre-wrap; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  @media (max-width:520px) { .row { grid-template-columns:1fr; } .card { padding:22px; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>התקנת Media Hub</h1>
+  <p class="muted">הכלי יוצר בחשבון ה-GitHub שלך ריפו בשם <b>media-hub</b>, מעלה אליו את האתר, מפעיל GitHub Pages ומצפין את ההגדרות עם הסיסמה שתבחרי. הכל רץ מהדפדפן שלך, והטוקנים נשמרים מוצפנים בלבד.</p>
+  <form id="f">
+    <label>GitHub token <small>(ghp_…)</small><input id="gh" required autocomplete="off"></label>
+    <label>Apify API token<input id="ap" required autocomplete="off"></label>
+    <label>Claude API key <small>(לא חובה, לתרגום כותרות וחילוץ ציטוטים)</small><input id="cl" autocomplete="off" placeholder="sk-ant-…"></label>
+    <div class="row">
+      <label>סיסמה לאתר<input id="pw" type="password" required minlength="8"></label>
+      <label>אימות סיסמה<input id="pw2" type="password" required></label>
+    </div>
+    <label>שם הריפו<input id="repo" value="media-hub" required></label>
+    <button id="go" type="submit">התקנה</button>
+  </form>
+  <ol id="steps"></ol>
+  <div id="err" class="err" hidden></div>
+  <div id="done" class="done" hidden></div>
+</div>
+
+<script type="module">
+/*__CRYPTO__*/
+const FILES = /*__FILES__*/;
+const $ = (s) => document.querySelector(s);
+let GH_TOKEN = '';
+async function gh(path, opts = {}) {
+  const r = await fetch('https://api.github.com' + path, { ...opts, cache: 'no-store', headers: { Authorization: 'Bearer ' + GH_TOKEN, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) } });
+  let j = null; try { j = await r.json(); } catch {}
+  return { ok: r.ok, status: r.status, j, scopes: r.headers.get('x-oauth-scopes') };
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function step(text) {
+  const li = document.createElement('li'); li.textContent = text; li.className = 'run'; $('#steps').appendChild(li);
+  return { ok: (t) => { li.className = 'ok'; li.textContent = '✓ ' + (t || text); }, bad: (t) => { li.className = 'bad'; li.textContent = '✗ ' + (t || text); } };
+}
+
+$('#f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#err').hidden = true; $('#steps').innerHTML = ''; $('#done').hidden = true;
+  if ($('#pw').value !== $('#pw2').value) { $('#err').textContent = 'הסיסמאות לא זהות'; $('#err').hidden = false; return; }
+  $('#go').disabled = true;
+  let s;
+  try {
+    GH_TOKEN = $('#gh').value.trim();
+    const repo = $('#repo').value.trim();
+    s = step('בודק את הטוקן של GitHub…');
+    const me = await gh('/user');
+    if (!me.ok) throw new Error('הטוקן של GitHub לא תקין (' + me.status + ')');
+    if (me.scopes !== null && me.scopes !== undefined && !/\brepo\b/.test(me.scopes)) throw new Error('לטוקן חסרה ההרשאה "repo". צריך לסמן אותה בהגדרות הטוקן ב-GitHub ולנסות שוב.');
+    const owner = me.j.login;
+    s.ok('מחובר כ-' + owner);
+
+    s = step('בודק את הטוקן של Apify…');
+    const ap = await fetch('https://api.apify.com/v2/users/me', { headers: { Authorization: 'Bearer ' + $('#ap').value.trim() } });
+    if (!ap.ok) throw new Error('הטוקן של Apify לא תקין');
+    s.ok('Apify מחובר');
+
+    s = step('יוצר ריפו ' + repo + '…');
+    let r = await gh(`/repos/${owner}/${repo}`);
+    if (r.status === 404) {
+      const c = await gh('/user/repos', { method: 'POST', body: JSON.stringify({ name: repo, description: 'SEIL Media Hub', private: false, auto_init: true, has_issues: false, has_wiki: false, has_projects: false }) });
+      if (!c.ok) throw new Error('יצירת הריפו נכשלה: ' + (c.j?.message || c.status));
+      s.ok('הריפו נוצר');
+    } else if (r.ok) s.ok('הריפו כבר קיים, מעדכן אותו');
+    else throw new Error('שגיאה בגישה לריפו: ' + r.status);
+
+    s = step('ממתין שהריפו יהיה מוכן…');
+    let head = null;
+    for (let i = 0; i < 20 && !head; i++) {
+      const ref = await gh(`/repos/${owner}/${repo}/git/ref/heads/main`);
+      if (ref.ok) head = ref.j.object.sha; else await sleep(1500);
+    }
+    if (!head) throw new Error('הענף main לא נמצא');
+    s.ok('מוכן');
+
+    s = step('מצפין את ההגדרות…');
+    const cfg = { owner, repo, githubToken: GH_TOKEN, apifyToken: $('#ap').value.trim(), anthropicKey: $('#cl').value.trim(), claudeModel: 'claude-sonnet-4-5', dataBranch: 'data' };
+    const { text } = await sealConfig($('#pw').value, cfg);
+    s.ok('ההגדרות הוצפנו');
+
+    s = step('מעלה את קבצי האתר…');
+    const all = { ...FILES, 'config.enc': btoa(text) };
+    const tree = [];
+    let n = 0;
+    for (const [path, content] of Object.entries(all)) {
+      const b = await gh(`/repos/${owner}/${repo}/git/blobs`, { method: 'POST', body: JSON.stringify({ content, encoding: 'base64' }) });
+      if (!b.ok) throw new Error('העלאת ' + path + ' נכשלה: ' + (b.j?.message || b.status));
+      tree.push({ path, mode: '100644', type: 'blob', sha: b.j.sha });
+      s.ok(`מעלה קבצים… ${++n}/${Object.keys(all).length}`);
+    }
+    const baseCommit = await gh(`/repos/${owner}/${repo}/git/commits/${head}`);
+    const t = await gh(`/repos/${owner}/${repo}/git/trees`, { method: 'POST', body: JSON.stringify({ base_tree: baseCommit.j.tree.sha, tree }) });
+    if (!t.ok) throw new Error('יצירת tree נכשלה');
+    const c = await gh(`/repos/${owner}/${repo}/git/commits`, { method: 'POST', body: JSON.stringify({ message: 'Install / update Media Hub', tree: t.j.sha, parents: [head] }) });
+    const u = await gh(`/repos/${owner}/${repo}/git/refs/heads/main`, { method: 'PATCH', body: JSON.stringify({ sha: c.j.sha }) });
+    if (!u.ok) throw new Error('עדכון הענף נכשל');
+    s.ok('האתר הועלה (' + Object.keys(all).length + ' קבצים)');
+
+    s = step('יוצר ענף נתונים מוצפן…');
+    const dr = await gh(`/repos/${owner}/${repo}/git/ref/heads/data`);
+    if (!dr.ok) await gh(`/repos/${owner}/${repo}/git/refs`, { method: 'POST', body: JSON.stringify({ ref: 'refs/heads/data', sha: c.j.sha }) });
+    s.ok('ענף data מוכן');
+
+    s = step('מפעיל GitHub Pages…');
+    let p = await gh(`/repos/${owner}/${repo}/pages`);
+    if (!p.ok) {
+      p = await gh(`/repos/${owner}/${repo}/pages`, { method: 'POST', body: JSON.stringify({ build_type: 'legacy', source: { branch: 'main', path: '/' } }) });
+      if (!p.ok && p.status !== 409) throw new Error('הפעלת Pages נכשלה: ' + (p.j?.message || p.status) + '\nאפשר להפעיל ידנית: Settings → Pages → Branch: main → Save');
+    } else await gh(`/repos/${owner}/${repo}/pages/builds`, { method: 'POST' });
+    s.ok('GitHub Pages פעיל');
+
+    const url = `https://${owner.toLowerCase()}.github.io/${repo}/`;
+    $('#done').innerHTML = `ההתקנה הסתיימה! 🎉<br>האתר יעלה תוך דקה-שתיים בכתובת:<br><a href="${url}" target="_blank">${url}</a><br><small>אם מופיעה שגיאה 404, מחכים עוד דקה ומרעננים.</small>`;
+    $('#done').hidden = false;
+    $('#f').hidden = true;
+  } catch (err) {
+    s?.bad();
+    $('#err').textContent = err.message; $('#err').hidden = false;
+  } finally { $('#go').disabled = false; }
+});
+</script>
+</body>
+</html>
