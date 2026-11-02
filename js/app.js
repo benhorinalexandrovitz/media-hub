@@ -97,7 +97,7 @@ function fillSettings() {
   SET_MAP.forEach(([sel, k]) => ($(sel).value = c[k] || ''));
   $('#dSubs').value = c.golden.subsidiary; $('#dArch').value = c.golden.archetype; $('#dRat').value = c.golden.rationale; $('#dSeed').value = c.golden.seeded;
   $('#aInstagram').value = c.actors.instagram; $('#aTiktok').value = c.actors.tiktok; $('#aFacebook').value = c.actors.facebook; $('#aYoutube').value = c.actors.youtube; $('#aWeb').value = c.actors.web;
-  $('#aiHint').textContent = c.anthropicKey ? '' : '(צריך להגדיר Claude API key בהגדרות)';
+  $('#aiHint').textContent = c.anthropicKey ? '(באמצעות Claude)' : '(באמצעות Google Translate, חינם. עם Claude API key הציטוטים מדויקים יותר)';
 }
 $('#saveSettings').addEventListener('click', () => withBusy('שומר הגדרות…', async () => {
   const c = { ...S.cfg };

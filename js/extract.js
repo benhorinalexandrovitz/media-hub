@@ -66,6 +66,10 @@ export function findNumber(obj, keys, depth = 4) {
   }
   return null;
 }
+export function decodeEntities(s) {
+  if (!s || !/&[#\w]+;/.test(s)) return s || '';
+  const t = document.createElement('textarea'); t.innerHTML = s; return t.value;
+}
 export function parseCompact(v) {
   if (typeof v === 'number') return v;
   const s = String(v).trim().replace(/,/g, '');
@@ -122,51 +126,104 @@ const PAGE_FUNCTION = `async function pageFunction(context) {
     const ct = (response.headers()['content-type'] || 'image/jpeg').split(';')[0];
     return { kind: 'image', url: request.userData.orig || request.url, image: 'data:' + ct + ';base64,' + Buffer.from(buf).toString('base64') };
   }
-  await new Promise(r => setTimeout(r, 3000));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  await sleep(3500);
+  // 1) accept cookie / close popups
   try {
     await page.evaluate(() => {
-      const words = ['accept','agree','אישור','מאשר','מסכים','הבנתי','קבל','close','סגור','got it','ok'];
-      document.querySelectorAll('button, a[role=button], [class*=cookie] button').forEach(b => {
-        const t = (b.innerText || '').trim().toLowerCase();
-        if (t && t.length < 25 && words.some(w => t.includes(w))) { try { b.click(); } catch (e) {} }
-      });
-    });
-    await new Promise(r => setTimeout(r, 800));
-    await page.evaluate(() => {
-      const vw = innerWidth, vh = innerHeight;
-      document.querySelectorAll('body *').forEach(el => {
-        const s = getComputedStyle(el);
-        if ((s.position === 'fixed' || s.position === 'sticky') && el.tagName !== 'HEADER') {
-          const r = el.getBoundingClientRect();
-          if (r.width * r.height > vw * vh * 0.25 || r.top > vh * 0.6) el.style.display = 'none';
-        }
+      const words = ['accept','agree','אישור','אשר','מאשר','מסכים','הבנתי','קבל','close','סגור','סגירה','לא תודה','no thanks','got it','×','✕','x'];
+      document.querySelectorAll('button, a[role=button], [class*=close], [aria-label*=close i], [aria-label*=סגור]').forEach(b => {
+        const t = ((b.innerText || b.getAttribute('aria-label') || '') + '').trim().toLowerCase();
+        if (t && t.length < 20 && words.some(w => t === w || t.includes(w))) { try { b.click(); } catch (e) {} }
       });
     });
   } catch (e) {}
+  await sleep(700);
+  // 2) find the article: h1, subtitle, container
+  const info = await page.evaluate(() => {
+    const vis = el => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 50 && r.height > 10 && s.visibility !== 'hidden' && s.display !== 'none'; };
+    const m = n => { const e = document.querySelector('meta[property="' + n + '"],meta[name="' + n + '"],meta[itemprop="' + n + '"]'); return e ? (e.content || '') : ''; };
+    const ogt = (m('og:title') || document.title || '').replace(/\\s*[|\\-–—]\\s*[^|\\-–—]{2,30}$/, '').trim();
+    let h1 = [...document.querySelectorAll('h1')].filter(vis).sort((a, b) => b.innerText.length - a.innerText.length)[0];
+    if (!h1 && ogt) {
+      const key = ogt.slice(0, 25);
+      h1 = [...document.querySelectorAll('h1,h2,h3,div,span')].filter(e => vis(e) && e.children.length < 3 && (e.innerText || '').trim().startsWith(key)).sort((a, b) => a.innerText.length - b.innerText.length)[0];
+    }
+    // container = smallest ancestor of h1 holding enough paragraph text
+    let box = null;
+    const pText = el => [...el.querySelectorAll('p')].reduce((a, p) => a + (p.innerText || '').length, 0);
+    if (h1) {
+      box = h1.closest('article');
+      if (!box || pText(box) < 300) { let a = h1.parentElement; while (a && a !== document.body && pText(a) < 400) a = a.parentElement; box = a; }
+    }
+    if (!box) box = document.querySelector('article') || document.querySelector('main') || document.body;
+    // subtitle: first heading/paragraph after h1
+    let sub = '';
+    if (h1) {
+      const all = [...box.querySelectorAll('h2, p, [class*=sub], [class*=excerpt], [class*=lead], [class*=summary]')];
+      const after = all.filter(e => (h1.compareDocumentPosition(e) & 4) && vis(e) && (e.innerText || '').trim().length > 25);
+      sub = after[0] ? after[0].innerText.trim() : '';
+    }
+    const paras = [...box.querySelectorAll('p')].map(p => (p.innerText || '').trim()).filter(t => t.length > 40);
+    return { h1: h1 ? h1.innerText.trim() : '', sub: sub || m('og:description') || m('description'), paras: paras.slice(0, 80), hasH1: !!h1 };
+  });
+  // 3) clean page: remove overlays, fixed/sticky bars, ads, iframes
+  await page.evaluate(() => {
+    const kill = el => { try { el.style.setProperty('display', 'none', 'important'); } catch (e) {} };
+    document.querySelectorAll('iframe, ins, [id*=google_ads], [class*=adsbygoogle], [id^=div-gpt], [class*=taboola], [id*=taboola], [class*=outbrain], [class*=popup], [class*=modal], [role=dialog], [aria-modal=true], [class*=cookie], [id*=cookie], [class*=newsletter], [class*=banner], [class*=Banner], [class*=advert], [class*=-ad-], [class^=ad-], [class*=" ad-"], [id^=ad-], [id*=-ad-]').forEach(kill);
+    document.querySelectorAll('body *').forEach(el => {
+      const s = getComputedStyle(el);
+      if (s.position === 'fixed' || s.position === 'sticky') kill(el);
+      else if (s.position === 'absolute' && +s.zIndex > 999) kill(el);
+    });
+    document.documentElement.style.overflow = 'auto'; document.body.style.overflow = 'auto';
+  });
+  await sleep(300);
+  // 4) crop rectangle around headline + subtitle + opening of the article
+  const rect = await page.evaluate(() => {
+    const h1 = [...document.querySelectorAll('h1')].filter(e => e.getBoundingClientRect().height > 10).sort((a, b) => b.innerText.length - a.innerText.length)[0];
+    if (!h1) return null;
+    let box = h1.closest('article') || h1.parentElement;
+    const pText = el => [...el.querySelectorAll('p')].reduce((a, p) => a + (p.innerText || '').length, 0);
+    while (box && box !== document.body && pText(box) < 400) box = box.parentElement;
+    const hb = h1.getBoundingClientRect(); const bb = (box || h1).getBoundingClientRect();
+    const x = Math.max(0, Math.min(hb.left, bb.left) - 24);
+    const right = Math.min(innerWidth, Math.max(hb.right, Math.min(bb.right, bb.left + 980)) + 24);
+    const w = right - x;
+    const y = Math.max(0, hb.top + scrollY - 90);
+    return { x, y, w, h: Math.round(Math.min(Math.max(w * 1.15, 700), 1300)) };
+  });
   const meta = await page.evaluate(() => {
     const m = n => { const e = document.querySelector('meta[property="' + n + '"],meta[name="' + n + '"],meta[itemprop="' + n + '"]'); return e ? (e.content || '') : ''; };
     const ld = [];
     document.querySelectorAll('script[type="application/ld+json"]').forEach(s => { try { ld.push(JSON.parse(s.textContent)); } catch (e) {} });
-    const art = document.querySelector('article') || document.querySelector('main') || document.body;
     const timeEl = document.querySelector('time[datetime]');
     return {
-      title: m('og:title') || document.title, h1: (document.querySelector('h1') || {}).innerText || '',
-      siteName: m('og:site_name') || m('application-name'), image: m('og:image'),
+      title: m('og:title') || document.title, siteName: m('og:site_name') || m('application-name'), image: m('og:image'),
       published: m('article:published_time') || m('datePublished') || m('pubdate') || m('publish-date') || m('date') || (timeEl ? timeEl.getAttribute('datetime') : ''),
-      author: m('author') || m('article:author') || m('dcterms.creator') || m('byl'),
-      description: m('og:description') || m('description'), ld,
-      text: (art.innerText || '').replace(/\\n{3,}/g, '\\n\\n').slice(0, 14000), lang: document.documentElement.lang || ''
+      author: m('author') || m('article:author') || m('dcterms.creator') || m('byl'), description: m('og:description') || m('description'), ld,
     };
   });
-  const shot = await page.screenshot({ type: 'jpeg', quality: 72 });
-  return { kind: 'page', url: request.userData.orig || request.url, loadedUrl: request.loadedUrl, ...meta, screenshot: 'data:image/jpeg;base64,' + Buffer.from(shot).toString('base64') };
+  let shot = null;
+  try {
+    if (rect && rect.w > 200) {
+      const r = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.w), height: Math.round(rect.h) };
+      await page.evaluate(y => window.scrollTo(0, Math.max(0, y - 10)), r.y);
+      await sleep(1200);
+      await page.evaluate(() => document.querySelectorAll('body *').forEach(el => { const s = getComputedStyle(el); if (s.position === 'fixed' || s.position === 'sticky') el.style.setProperty('display', 'none', 'important'); }));
+      await page.evaluate(() => window.scrollTo(0, 0));
+      shot = await page.screenshot({ type: 'jpeg', quality: 78, clip: r, captureBeyondViewport: true });
+    }
+  } catch (e) { shot = null; }
+  if (!shot) shot = await page.screenshot({ type: 'jpeg', quality: 75 });
+  return { kind: 'page', url: request.userData.orig || request.url, loadedUrl: request.loadedUrl, ...meta, h1: info.h1, sub: info.sub, paras: info.paras, text: info.paras.join('\\n'), cropped: !!rect, screenshot: 'data:image/jpeg;base64,' + Buffer.from(shot).toString('base64') };
 }`;
 
 function puppeteerInput(requests, cfg) {
   return {
     startUrls: requests,
     pageFunction: PAGE_FUNCTION,
-    preNavigationHooks: `[async ({ page }) => { await page.setViewport({ width: 1280, height: 1050 }); }]`,
+    preNavigationHooks: `[async ({ page }) => { await page.setViewport({ width: 1280, height: 1600 }); }]`,
     proxyConfiguration: cfg.proxyGroup ? { useApifyProxy: true, apifyProxyGroups: [cfg.proxyGroup] } : { useApifyProxy: true },
     maxRequestRetries: 2, maxConcurrency: 6, pageLoadTimeoutSecs: 60, pageFunctionTimeoutSecs: 90,
     useChrome: false, headless: true, ignoreSslErrors: true, downloadMedia: true, downloadCss: true,
@@ -198,7 +255,7 @@ async function enrichInstagram(apify, cfg, items, log) {
       res.find((x) => x.inputUrl === it.url) || (posts.length === 1 ? res[0] : null);
     if (!r || r.error) { it.note = r?.error || 'לא נמצא באינסטגרם'; continue; }
     Object.assign(it.fetched, {
-      views: r.videoPlayCount ?? r.videoViewCount ?? r.igPlayCount ?? null, likes: r.likesCount, text: r.caption || '',
+      views: r.videoPlayCount ?? r.videoViewCount ?? r.igPlayCount ?? null, likes: r.likesCount, text: decodeEntities(r.caption || ''),
       date: toISODate(r.timestamp), handle: r.ownerUsername, author: r.ownerFullName || r.ownerUsername, imageUrl: r.displayUrl, isVideo: r.type === 'Video',
     });
   }
@@ -269,9 +326,11 @@ async function enrichWeb(apify, cfg, items, log) {
     if (!r || r['#error']) { it.note = 'לא הצלחתי לפתוח את הכתבה'; continue; }
     const ld = pickLd(r.ld);
     Object.assign(it.fetched, {
-      title: (ld.headline || r.h1 || r.title || '').trim(), text: r.text || r.description || '', author: ld.author || r.author || '',
-      date: toISODate(ld.date || r.published), site: r.siteName || ld.publisher || '', image: r.screenshot,
+      title: decodeEntities(r.h1 || ld.headline || r.title || '').trim(), sub: decodeEntities(r.sub || r.description || '').trim(),
+      paras: (r.paras || []).map(decodeEntities), text: decodeEntities(r.text || r.description || ''), author: decodeEntities(ld.author || r.author || ''),
+      date: toISODate(ld.date || r.published), site: decodeEntities(r.siteName || ld.publisher || ''), image: r.screenshot, ogImage: r.image,
     });
+    if (r.cropped === false) it.note = 'לא זוהתה כותרת בעמוד. כדאי לבדוק את צילום המסך';
   }
 }
 async function fetchImagesViaApify(apify, cfg, list, log) {

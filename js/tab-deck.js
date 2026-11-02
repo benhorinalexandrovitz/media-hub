@@ -3,6 +3,7 @@ import { pool } from './apify.js';
 import * as KB from './kb.js';
 import * as X from './excel.js';
 import { buildDeck } from './deck.js';
+import { translateMany, pickPositive, quoteMarks } from './translate.js';
 import { $, esc, toast, withBusy, logger, wireDrop, pickFile, fileToDataURL, fmtDT, today } from './ui.js';
 import { saveKB, pushIndex } from './app.js';
 
@@ -126,16 +127,18 @@ function buildItems() {
 function finalize(it) {
   const k = KB.lookup(S.kb, it) || {};
   const h = it.hint || {}; const f = it.fetched;
+  const preferLink = $('#optPreferLink')?.checked;
   it.src = {};
   const pick = (field, ...cands) => { for (const [src, v] of cands) if (v) { it[field] = v; it.src[field] = src; return; } it[field] = it[field] || ''; };
+  const order = (hint, ...rest) => (preferLink ? [...rest, hint] : [hint, ...rest]);
   const host = (() => { try { return new URL(it.url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
   const kbPub = it.platform !== 'web' && k.publication && [it.det?.handle, f.handle].some((x) => x && x.toLowerCase() === k.publication.toLowerCase()) ? '' : k.publication;
-  pick('publication', ['hint', h.publication], ['kb', kbPub], ['fetched', it.platform === 'web' ? f.site : SOCIAL_PUB[it.platform]], ['host', host]);
-  pick('journalist', ['hint', h.journalist], ['kb', k.journalist], ['fetched', f.author], ['fetched', f.handle]);
-  if (h.channelType) it.channelType = h.channelType;
+  pick('publication', ...order(['hint', h.publication], ['kb', kbPub], ['fetched', it.platform === 'web' ? f.site : SOCIAL_PUB[it.platform]]), ['host', host]);
+  pick('journalist', ...order(['hint', h.journalist], ['kb', k.journalist], ['fetched', f.author], ['fetched', f.handle]));
+  if (h.channelType && !preferLink) it.channelType = h.channelType;
   else if (it.platform === 'web' && k.channelType) it.channelType = k.channelType;
-  pick('date', ['hint', h.date], ['fetched', f.date]);
-  pick('headline', ['hint', h.headline], ['fetched', f.title], ['fetched', (f.text || '').split('\n').find((l) => l.trim())?.slice(0, 220)]);
+  pick('date', ...order(['hint', h.date], ['fetched', f.date]));
+  pick('headline', ...order(['hint', h.headline], ['fetched', f.title], ['fetched', (f.text || '').split('\n').find((l) => l.trim())?.slice(0, 220)]));
   if (f.views != null) it.views = f.views;
   if (f.image) it.image = f.image;
   const got = f.image || f.title || f.text || f.views != null;
@@ -144,20 +147,40 @@ function finalize(it) {
 }
 
 async function addAI(items) {
-  if (!$('#optAI').checked || !S.cfg.anthropicKey) return;
+  if (!$('#optAI').checked) return;
   const list = items.filter((i) => i.fetched.text || i.fetched.title);
   if (!list.length) return;
-  log(`Claude: מתרגם כותרות ומחלץ ציטוטים ל-${list.length} פריטים…`);
-  await pool(list, 3, async (it) => {
-    try {
-      const r = await aiQuotes(S.cfg, it);
-      if (!r) return;
-      if (r.headline && it.src.headline !== 'hint') it.headline = r.headline;
-      if (r.journalist && it.platform === 'web' && !['hint', 'kb'].includes(it.src.journalist)) it.journalist = r.journalist;
-      if (r.publication && it.platform === 'web' && !['hint', 'kb'].includes(it.src.publication)) it.publication = r.publication;
-      if (Array.isArray(r.quotes) && r.quotes.length) it.quotes = r.quotes;
-    } catch (e) { log('⚠️ Claude: ' + e.message); }
-  });
+  if (S.cfg.anthropicKey) {
+    log(`Claude: מתרגם כותרות ומחלץ ציטוטים ל-${list.length} פריטים…`);
+    await pool(list, 3, async (it) => {
+      try {
+        const r = await aiQuotes(S.cfg, it);
+        if (!r) return freeTranslate(it);
+        if (r.headline && it.src.headline !== 'hint') it.headline = r.headline;
+        if (r.journalist && it.platform === 'web' && !['hint', 'kb'].includes(it.src.journalist)) it.journalist = r.journalist;
+        if (r.publication && it.platform === 'web' && !['hint', 'kb'].includes(it.src.publication)) it.publication = r.publication;
+        if (Array.isArray(r.quotes) && r.quotes.length) it.quotes = r.quotes;
+      } catch (e) { log('⚠️ Claude: ' + e.message + ' (עובר לתרגום חינמי)'); await freeTranslate(it); }
+    });
+  } else {
+    log(`מתרגם כותרות ובוחר ציטוטים חיוביים ל-${list.length} פריטים (Google Translate)…`);
+    await pool(list, 4, freeTranslate);
+  }
+}
+// Free path: Google Translate for headline / names + keyword-based positive quote picking
+async function freeTranslate(it) {
+  try {
+    const f = it.fetched;
+    const paras = f.paras?.length ? f.paras : (f.text || '').split('\n');
+    const picks = it.platform === 'web' ? pickPositive([f.sub, ...paras].filter(Boolean), 5) : [];
+    const fields = [it.headline, it.src.journalist === 'fetched' ? it.journalist : '', it.src.publication === 'fetched' ? it.publication : '', ...picks];
+    const tr = await translateMany(fields);
+    if (tr[0]) it.headline = tr[0];
+    if (tr[1]) it.journalist = tr[1];
+    if (tr[2]) it.publication = tr[2];
+    const q = tr.slice(3).filter(Boolean).map(quoteMarks);
+    if (q.length && !(it.quotes || []).length) { it.quotes = q; it.autoQuotes = true; }
+  } catch (e) { log('⚠️ תרגום: ' + e.message); }
 }
 
 async function runFetch() {
@@ -219,6 +242,7 @@ function render() {
           </div>
         </div>
         ${it.note ? `<p class="small muted" style="margin:0 0 8px">⚠ ${esc(it.note)}</p>` : ''}
+        ${it.autoQuotes ? `<p class="small muted" style="margin:0 0 8px">💡 הציטוטים נבחרו ותורגמו אוטומטית. כדאי לעבור עליהם</p>` : ''}
         <div class="item-grid">
           <label class="field"><span>Channel Type</span><input data-k="channelType" value="${esc(it.channelType)}"></label>
           <label class="field"><span>Publication</span><input data-k="publication" value="${esc(it.publication)}"></label>

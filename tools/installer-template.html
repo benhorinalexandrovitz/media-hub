@@ -35,7 +35,7 @@
   <p class="muted">הכלי יוצר בחשבון ה-GitHub שלך ריפו בשם <b>media-hub</b>, מעלה אליו את האתר, מפעיל GitHub Pages ומצפין את ההגדרות עם הסיסמה שתבחרי. הכל רץ מהדפדפן שלך, והטוקנים נשמרים מוצפנים בלבד.</p>
   <form id="f">
     <label>GitHub token <small>(ghp_…)</small><input id="gh" required autocomplete="off"></label>
-    <label>Apify API token<input id="ap" required autocomplete="off"></label>
+    <label>Apify API token <small>(בעדכון של אתר קיים אפשר להשאיר ריק)</small><input id="ap" autocomplete="off"></label>
     <label>Claude API key <small>(לא חובה, לתרגום כותרות וחילוץ ציטוטים)</small><input id="cl" autocomplete="off" placeholder="sk-ant-…"></label>
     <div class="row">
       <label>סיסמה לאתר<input id="pw" type="password" required minlength="8"></label>
@@ -81,10 +81,12 @@ $('#f').addEventListener('submit', async (e) => {
     const owner = me.j.login;
     s.ok('מחובר כ-' + owner);
 
-    s = step('בודק את הטוקן של Apify…');
-    const ap = await fetch('https://api.apify.com/v2/users/me', { headers: { Authorization: 'Bearer ' + $('#ap').value.trim() } });
-    if (!ap.ok) throw new Error('הטוקן של Apify לא תקין');
-    s.ok('Apify מחובר');
+    if ($('#ap').value.trim()) {
+      s = step('בודק את הטוקן של Apify…');
+      const ap = await fetch('https://api.apify.com/v2/users/me', { headers: { Authorization: 'Bearer ' + $('#ap').value.trim() } });
+      if (!ap.ok) throw new Error('הטוקן של Apify לא תקין');
+      s.ok('Apify מחובר');
+    }
 
     s = step('יוצר ריפו ' + repo + '…');
     let r = await gh(`/repos/${owner}/${repo}`);
@@ -105,9 +107,21 @@ $('#f').addEventListener('submit', async (e) => {
     s.ok('מוכן');
 
     s = step('מצפין את ההגדרות…');
-    const cfg = { owner, repo, githubToken: GH_TOKEN, apifyToken: $('#ap').value.trim(), anthropicKey: $('#cl').value.trim(), claudeModel: 'claude-sonnet-4-5', dataBranch: 'data' };
-    const { text } = await sealConfig($('#pw').value, cfg);
-    s.ok('ההגדרות הוצפנו');
+    let cfg = { owner, repo, githubToken: GH_TOKEN, claudeModel: 'claude-sonnet-4-5', dataBranch: 'data' };
+    let salt, it;
+    const ex = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/config.enc?ref=main&t=${Date.now()}`, { cache: 'no-store', headers: { Authorization: 'Bearer ' + GH_TOKEN, Accept: 'application/vnd.github.raw' } });
+    if (ex.ok) {
+      const oldText = await ex.text();
+      let old;
+      try { old = await openConfig(oldText, { password: $('#pw').value }); } catch { throw new Error('האתר כבר מותקן עם סיסמה אחרת. כדי לעדכן אותו בלי לאבד את ההיסטוריה צריך להזין את הסיסמה הקיימת.'); }
+      cfg = { ...old.cfg, ...cfg, claudeModel: old.cfg.claudeModel || cfg.claudeModel };
+      salt = old.salt; it = old.it;
+    }
+    if ($('#ap').value.trim()) cfg.apifyToken = $('#ap').value.trim();
+    if ($('#cl').value.trim()) cfg.anthropicKey = $('#cl').value.trim();
+    if (!cfg.apifyToken) throw new Error('חסר טוקן של Apify');
+    const { text } = await sealConfig($('#pw').value, cfg, salt, it);
+    s.ok(ex.ok ? 'ההגדרות הקיימות נשמרו (ההיסטוריה נשמרת)' : 'ההגדרות הוצפנו');
 
     s = step('מעלה את קבצי האתר…');
     const all = { ...FILES, 'config.enc': btoa(text) };
